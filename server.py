@@ -38,9 +38,9 @@ def teardown_request(exception):
         db.close()
 
 
-@app.route('/see_entries', methods=['GET'])
-def hello_world():
-    cur = g.db.execute('SELECT id, title FROM quests ORDER BY id desc')
+@app.route('/quest', methods=['GET'])
+def get_quests():
+    cur = g.db.execute('SELECT id, title FROM quests ORDER BY id DESC')
     entries = []
     for row in cur.fetchall():
         entries.append(dict(id=row[0], title=row[1]))
@@ -50,15 +50,32 @@ def hello_world():
     return jsonify(quests=entries)
 
 
-@app.route('/add', methods=['POST'])
+@app.route('/quest', methods=['POST'])
 def add_quest():
     print(request.json)
     if not request.json or 'title' not in request.json:
         abort(400)
-    g.db.execute('insert into quests (title) values (?)', [request.json['title']])
+    g.db.execute('INSERT INTO quests (title) VALUES (?)', [request.json['title']])
     g.db.commit()
     flash('New quest submitted')
-    return 200
+    return "Saved"
+
+
+@app.route('/quest/get_staff_pick', methods=['GET'])
+def get_staff_pick():
+    staff_pick = [
+        {"title": "Clean your room",
+         "difficultyLevel": "Easy"},
+        {"title": "Read a book",
+         "difficultyLevel": "Medium"},
+        {"title": "Get an A in Maths",
+         "difficultyLevel": "Very Hard"},
+        {"title": "Shovel snow off the driveway",
+         "difficultyLevel": "Easy"},
+        {"title": "Wash the dishes",
+         "difficultyLevel": "Very Easy"}
+    ]
+    return jsonify(quests=staff_pick)
 
 
 if __name__ == '__main__':
