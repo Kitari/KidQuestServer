@@ -66,5 +66,12 @@ def get_staff_pick():
     return jsonify(quests=staff_pick)
 
 
+@app.route('/quest/get_trending', methods=['GET'])
+def get_trending():
+    cur = g.db.execute('SELECT title, count(title) FROM quests GROUP BY title ORDER BY count(title) DESC LIMIT 5')
+    trending = [dict(title=row[0]) for row in cur.fetchall()]
+    return jsonify(quests=trending)
+
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0')
