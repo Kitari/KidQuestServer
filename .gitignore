@@ -1,1 +1,3 @@
 .idea/
+kidquest.db
+*.pyc

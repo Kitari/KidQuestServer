@@ -3,19 +3,12 @@ from contextlib import closing
 
 from flask import Flask, g, request, flash, jsonify, abort
 
-# config
-DATABASE = 'C:\\Users\\m_por\\Databases\\KidQuest.db'
-DEBUG = True
-SECRET_KEY = 'DEVKEY'
-USERNAME = 'admin'
-PASSWORD = 'default'
-
 app = Flask(__name__)
-app.config.from_object(__name__)
+app.config.from_object('linux-dev-settings')
 
 
 def connect_db():
-    return sqlite3.connect('C:\\Users\\m_por\\Databases\\KidQuest.db')
+    return sqlite3.connect(app.config['DATABASE'])
 
 
 def init_db():
@@ -41,12 +34,7 @@ def teardown_request(exception):
 @app.route('/quest', methods=['GET'])
 def get_quests():
     cur = g.db.execute('SELECT id, title FROM quests ORDER BY id DESC')
-    entries = []
-    for row in cur.fetchall():
-        entries.append(dict(id=row[0], title=row[1]))
-        print(row[0])
-        print(row[1])
-    print(jsonify(entries))
+    entries = [dict(id=row[0], title=row[1]) for row in cur.fetchall()]
     return jsonify(quests=entries)
 
 
@@ -76,6 +64,13 @@ def get_staff_pick():
          "difficultyLevel": "Very Easy"}
     ]
     return jsonify(quests=staff_pick)
+
+
+@app.route('/quest/get_trending', methods=['GET'])
+def get_trending():
+    cur = g.db.execute('SELECT title, count(title) FROM quests GROUP BY title ORDER BY count(title) DESC LIMIT 5')
+    trending = [dict(title=row[0]) for row in cur.fetchall()]
+    return jsonify(quests=trending)
 
 
 if __name__ == '__main__':
