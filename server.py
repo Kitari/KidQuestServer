@@ -4,7 +4,7 @@ from contextlib import closing
 from flask import Flask, g, request, flash, jsonify, abort
 
 app = Flask(__name__)
-app.config.from_object('linux-dev-settings')
+app.config.from_object('windows-dev-settings')
 
 
 def connect_db():
@@ -69,7 +69,7 @@ def get_staff_pick():
 @app.route('/quest/get_trending', methods=['GET'])
 def get_trending():
     cur = g.db.execute('SELECT title, count(title) FROM quests GROUP BY title ORDER BY count(title) DESC LIMIT 5')
-    trending = [dict(title=row[0]) for row in cur.fetchall()]
+    trending = [dict(title=row[0], difficultyLevel="Medium") for row in cur.fetchall()]
     return jsonify(quests=trending)
 
 
