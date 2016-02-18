@@ -1,3 +1,4 @@
 .idea/
 kidquest.db
 *.pyc
+app.sqlite
