@@ -4,8 +4,8 @@ from contextlib import closing
 from flask import Flask, g, request, flash, jsonify, abort
 
 app = Flask(__name__)
-app.config.from_object('windows-dev-settings')
-
+app.config.from_object('linux-dev-settings')
+app.config.from_envvar('KIDQUEST_SERVER_SETTINGS', silent=True)
 
 def connect_db():
     return sqlite3.connect(app.config['DATABASE'])
