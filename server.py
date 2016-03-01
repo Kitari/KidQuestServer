@@ -25,6 +25,8 @@ def verify_password(email, password):
 
 
 def verify_user(c):
+    if c is None:
+        abort(404)
     # Check if logged in user is the same as parameterized user.
     if g.user is None or g.user is not c:
         abort(401)
@@ -57,40 +59,55 @@ def detail_user(user_id):
     user = User.query.get(user_id)
     verify_user(user)
 
-    if user is None:
-        abort(404)
-
     if request.method == 'GET':
-        return jsonify(user.serialize()), 201
+        return jsonify(user.serialize())
 
     elif request.method == 'PUT':
-        if 'email' in request.json:
-            user.email = request.json['email']
-            db.session.add(user)
-            db.session.commit()
-        if 'parent_id' in request.json:
-            parent = User.query.get(request.json['parent_id'])
-            user.parent = parent
-            user.save()
-        return jsonify(user.serialize()), 201
+        user.update_with_json(request.json)
+        return jsonify(user.serialize())
 
 
-@app.route('/users/<int:user_id>/quests/', methods=['POST'])
+@app.route('/users/<int:user_id>/quests/', methods=['POST', 'GET'])
 @auth.login_required
-def add_quest_to_child(user_id):
-    required_json = ['title']
-    json = request.json
+def add_quest_to_user(user_id):
+    user = User.query.get(user_id)
+    verify_user(user)
 
-    if not valid_json(json, required_json):
-        abort(400)
+    if request.method == 'GET':
+        return jsonify(quests=[q.serialize() for q in user.quests])
 
-    child = User.query.get(user_id)
-    verify_user(child)
+    elif request.method == 'POST':
+        required_json = ['title']
+        json = request.json
 
-    quest = Quest(title=json.get('title'), user_id=user_id)
-    db.session.add(quest)
-    db.session.commit()
-    return jsonify(quest.serialize()), 201
+        if not valid_json(json, required_json):
+            abort(400)
+
+        quest = Quest(title=json.get('title'), user_id=user_id)
+        db.session.add(quest)
+        db.session.commit()
+        return jsonify(quest.serialize()), 201
+
+
+@app.route('/users/<int:user_id>/quests/<int:quest_id>/', methods=['GET', 'PUT'])
+@auth.login_required
+def user_quests(user_id, quest_id):
+    user = User.query.get(user_id)
+    verify_user(user)
+
+    quest = Quest.query.get(quest_id)
+
+    if quest is None:
+        abort(404)
+
+    if quest not in user.quests:
+        abort(401)
+
+    if request.method == 'GET':
+        return jsonify(quest.serialize())
+    elif request.method == 'PUT':
+        quest.update_with_json(request.json)
+        return jsonify(quest.serialize())
 
 
 def valid_json(json, required_json):
@@ -113,15 +130,15 @@ def trending_quests():
 def get_staff_pick():
     staff_pick = [
         {"title": "Clean your room",
-         "difficultyLevel": "Easy"},
+         "difficulty_level": "Easy"},
         {"title": "Read a book",
-         "difficultyLevel": "Medium"},
+         "difficulty_level": "Medium"},
         {"title": "Get an A in Maths",
-         "difficultyLevel": "Very Hard"},
+         "difficulty_level": "Very Hard"},
         {"title": "Shovel snow off the driveway",
-         "difficultyLevel": "Easy"},
+         "difficulty_level": "Easy"},
         {"title": "Wash the dishes",
-         "difficultyLevel": "Very Easy"}
+         "difficulty_level": "Very Easy"}
     ]
     return jsonify(quests=staff_pick)
 

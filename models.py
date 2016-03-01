@@ -19,14 +19,22 @@ class User(db.Model):
     def verify_password(self, password):
         return pwd_context.verify(password, self.password_hash)
 
+    def update_with_json(self, json):
+        if 'email' in json:
+            self.email = json['email']
+        if 'parent_id' in json:
+            self.parent = User.query.get(json['parent_id'])
+        if 'password_hash' in json:
+            self.hash_password(json['password'])
+
     def serialize(self):
         if self.parent is None:
             p = None
             session = object_session(self)
             d = session.query(User).filter_by(parent_id=self.id).all()
-            c = [children.serialize2() for children in d]
+            c = [children.serialize_recursive() for children in d]
         else:
-            p = self.parent.serialize2()
+            p = self.parent.serialize_recursive()
             c = None
 
         return {
@@ -37,14 +45,12 @@ class User(db.Model):
             'children': c
         }
 
-    def serialize2(self):
+    def serialize_recursive(self):
         return {
             'id': self.id,
             'email': self.email,
             'quests': [q.serialize() for q in self.quests]
         }
-
-
 
 
 class Quest(db.Model):
@@ -62,6 +68,13 @@ class Quest(db.Model):
             'title': self.title,
             'description': self.description,
             'completed': self.completed,
-            'confirmed': self.confirmed,
+            'confirmed': self.confirmed
         }
 
+    def update_with_json(self, json):
+        if 'confirmed' in json:
+            self.confirmed = json['confirmed']
+        if 'completed' in json:
+            self.completed = json['completed']
+            # if 'difficulty_level' in json:
+            # self.difficulty_level = json['difficulty_level']
