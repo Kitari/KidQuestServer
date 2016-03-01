@@ -1,8 +1,6 @@
-from flask.ext.httpauth import HTTPBasicAuth
-
 from flask import Flask, jsonify, abort, request, g
+from flask.ext.httpauth import HTTPBasicAuth
 from flask.ext.sqlalchemy import SQLAlchemy
-
 from sqlalchemy import func
 
 from models import User, Quest
@@ -95,13 +93,6 @@ def add_quest_to_child(user_id):
     return jsonify(quest.serialize()), 201
 
 
-@app.route('/quests/trending', methods=['GET'])
-def trending_quests():
-    quests = db.session.query(Quest.title, func.count(Quest.title)).group_by(Quest.title).all()
-    qs = [dict(title=q.title, difficultyLevel="Medium") for q in quests]
-    return jsonify(quests=qs)
-
-
 def valid_json(json, required_json):
     if not json:
         return False
@@ -109,6 +100,13 @@ def valid_json(json, required_json):
         return False
     else:
         return True
+
+
+@app.route('/quests/trending/', methods=['GET'])
+def trending_quests():
+    quests = db.session.query(Quest.title, func.count(Quest.title)).group_by(Quest.title).all()
+    qs = [dict(title=q.title, difficultyLevel="Medium") for q in quests]
+    return jsonify(quests=qs)
 
 
 @app.route('/quests/staff_pick', methods=['GET'])

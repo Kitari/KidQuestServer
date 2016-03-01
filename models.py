@@ -1,5 +1,7 @@
 from flask.ext.sqlalchemy import SQLAlchemy
 from passlib.apps import custom_app_context as pwd_context
+from sqlalchemy.orm import object_session
+
 db = SQLAlchemy()
 
 
@@ -20,15 +22,29 @@ class User(db.Model):
     def serialize(self):
         if self.parent is None:
             p = None
+            session = object_session(self)
+            d = session.query(User).filter_by(parent_id=self.id).all()
+            c = [children.serialize2() for children in d]
         else:
-            p = self.parent.serialize()
+            p = self.parent.serialize2()
+            c = None
 
         return {
             'id': self.id,
             'email': self.email,
             'quests': [q.serialize() for q in self.quests],
-            'parent': p
+            'parent': p,
+            'children': c
         }
+
+    def serialize2(self):
+        return {
+            'id': self.id,
+            'email': self.email,
+            'quests': [q.serialize() for q in self.quests]
+        }
+
+
 
 
 class Quest(db.Model):
