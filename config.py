@@ -6,3 +6,4 @@ SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(basedir, 'app.sqlite')
 SQLALCHEMY_MIGRATE_REPO = os.path.join(basedir, 'db_repository')
 DEBUG = True
 SQLALCHEMY_TRACK_MODIFICATIONS = False
+SECRET_KEY = "HELLOFRIENDS"

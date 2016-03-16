@@ -1,6 +1,8 @@
+import re
+
 from flask import Flask, jsonify, abort, request, g
 from flask.ext.httpauth import HTTPBasicAuth
-from flask.ext.sqlalchemy import SQLAlchemy
+from flask.ext.sqlalchemy import SQLAlchemy, orm
 from sqlalchemy import func
 
 from models import User, Quest
@@ -11,17 +13,22 @@ app.config.from_pyfile('config.py')
 db = SQLAlchemy(app)
 db.init_app(app)
 db.engine.execute("PRAGMA foreign_keys=ON")
+sm = orm.sessionmaker(bind=db, autoflush=True, autocommit=True, expire_on_commit=True)
+session = orm.scoped_session(sm)
 
 auth = HTTPBasicAuth()
 
 
 @auth.verify_password
-def verify_password(email, password):
-    user = User.query.filter_by(email=email).first()
-
-    if user and user.verify_password(password):
-        g.user = user
-        return True
+def verify_password(email_or_token, password):
+    user = User.verify_auth_token(email_or_token)
+    if not user:
+        # try to authenticate with email and password
+        user = User.query.filter_by(email=email_or_token).first()
+        if not user or not user.verify_password(password):
+            return False
+    g.user = user
+    return True
 
 
 def verify_user(c):
@@ -32,8 +39,16 @@ def verify_user(c):
         abort(401)
 
 
+@app.route('/token/')
+@auth.login_required
+def get_auth_token():
+    token = g.user.generate_auth_token()
+    id = g.user.id
+    return jsonify({'token': token.decode('ascii'), 'id': id})
+
+
 @app.route('/users/', methods=['POST'])
-def create_child():
+def create_user():
     required_json = ['email', 'password']
     json = request.json
 
@@ -43,14 +58,17 @@ def create_child():
     email = json.get('email')
     password = json.get('password')
 
+    if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
+        abort(400, "Invalid email")
+
     if User.query.filter_by(email=email).first() is not None:
         abort(409)  # existing user
 
-    child = User(email=email)
-    child.hash_password(password)
-    db.session.add(child)
+    user = User(email=email)
+    user.hash_password(password)
+    db.session.add(user)
     db.session.commit()
-    return jsonify(child.serialize()), 201
+    return jsonify(user.serialize()), 201
 
 
 @app.route('/users/<int:user_id>/', methods=['GET', 'PUT'])
@@ -63,7 +81,11 @@ def detail_user(user_id):
         return jsonify(user.serialize())
 
     elif request.method == 'PUT':
-        user.update_with_json(request.json)
+        json = request.json
+        if 'parent_id' in json:
+            db.session.query(User).filter_by(id=user_id).update({"parent_id": json['parent_id']})
+
+        db.session.commit()
         return jsonify(user.serialize())
 
 
@@ -77,15 +99,20 @@ def add_quest_to_user(user_id):
         return jsonify(quests=[q.serialize() for q in user.quests])
 
     elif request.method == 'POST':
-        required_json = ['title']
+        required_json = ['title', 'difficulty_level']
         json = request.json
 
         if not valid_json(json, required_json):
             abort(400)
 
-        quest = Quest(title=json.get('title'), user_id=user_id)
+        quest = Quest(title=json.get('title'), user_id=user_id, difficulty_level=json.get('difficulty_level'))
+
+        if json['description']:
+            quest.description = json['description']
+
         db.session.add(quest)
         db.session.commit()
+
         return jsonify(quest.serialize()), 201
 
 
@@ -96,7 +123,6 @@ def user_quests(user_id, quest_id):
     verify_user(user)
 
     quest = Quest.query.get(quest_id)
-
     if quest is None:
         abort(404)
 
@@ -106,8 +132,16 @@ def user_quests(user_id, quest_id):
     if request.method == 'GET':
         return jsonify(quest.serialize())
     elif request.method == 'PUT':
-        quest.update_with_json(request.json)
-        return jsonify(quest.serialize())
+        json = request.json
+
+        quest = db.session.query(Quest).filter_by(id=quest_id)
+        if 'confirmed' in json:
+            quest.update({"confirmed": json['confirmed']})
+        if 'completed' in json:
+            quest.update({"completed": json['completed']})
+        db.session.commit()
+
+        return jsonify(quest.first().serialize())
 
 
 def valid_json(json, required_json):
@@ -122,7 +156,7 @@ def valid_json(json, required_json):
 @app.route('/quests/trending/', methods=['GET'])
 def trending_quests():
     quests = db.session.query(Quest.title, func.count(Quest.title)).group_by(Quest.title).all()
-    qs = [dict(title=q.title, difficultyLevel="Medium") for q in quests]
+    qs = [dict(title=q.title, difficulty_level="Medium") for q in quests]
     return jsonify(quests=qs)
 
 

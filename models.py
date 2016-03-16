@@ -1,6 +1,9 @@
 from flask.ext.sqlalchemy import SQLAlchemy
+from itsdangerous import JSONWebSignatureSerializer, SignatureExpired, BadSignature
 from passlib.apps import custom_app_context as pwd_context
 from sqlalchemy.orm import object_session
+
+from config import SECRET_KEY
 
 db = SQLAlchemy()
 
@@ -18,6 +21,22 @@ class User(db.Model):
 
     def verify_password(self, password):
         return pwd_context.verify(password, self.password_hash)
+
+    def generate_auth_token(self, expiration=600):
+        s = JSONWebSignatureSerializer(SECRET_KEY)
+        return s.dumps({'id': self.id})
+
+    @staticmethod
+    def verify_auth_token(token):
+        s = JSONWebSignatureSerializer(SECRET_KEY)
+        try:
+            data = s.loads(token)
+        except SignatureExpired:
+            return None  # valid token but expired
+        except BadSignature:
+            return None  # invalid token
+        user = User.query.get(data['id'])
+        return user
 
     def update_with_json(self, json):
         if 'email' in json:
@@ -61,6 +80,7 @@ class Quest(db.Model):
     completed = db.Column(db.Boolean, nullable=False, default=False)
     confirmed = db.Column(db.Boolean, nullable=False, default=False)
     description = db.Column(db.String(120), nullable=True)
+    difficulty_level = db.Column(db.String(50), nullable=False, default="Medium")
 
     def serialize(self):
         return {
@@ -68,13 +88,6 @@ class Quest(db.Model):
             'title': self.title,
             'description': self.description,
             'completed': self.completed,
-            'confirmed': self.confirmed
+            'confirmed': self.confirmed,
+            'difficultyLevel': self.difficulty_level
         }
-
-    def update_with_json(self, json):
-        if 'confirmed' in json:
-            self.confirmed = json['confirmed']
-        if 'completed' in json:
-            self.completed = json['completed']
-            # if 'difficulty_level' in json:
-            # self.difficulty_level = json['difficulty_level']
