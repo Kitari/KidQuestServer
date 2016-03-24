@@ -8,24 +8,6 @@ from config import SECRET_KEY
 db = SQLAlchemy()
 
 
-class Character(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    character_name = db.Column(db.String(64))
-    character_level = db.Column(db.Integer, default=1)
-    gold = db.Column(db.Integer, default=0)
-    xp = db.Column(db.Integer, default=0)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-
-    def serialize(self):
-        return {
-            'id': self.id,
-            'character_name': self.character_name,
-            'character_level': self.character_level,
-            'gold': self.gold,
-            'xp': self.xp
-        }
-
-
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(120), nullable=False)
@@ -33,7 +15,11 @@ class User(db.Model):
     parent = db.relation("User", remote_side=[id])
     quests = db.relationship("Quest", back_populates="user")
     password_hash = db.Column(db.String(128))
-    character = db.relationship("Character", uselist=False, backref="user")
+    character_name = db.Column(db.String(64))
+    character_level = db.Column(db.Integer, default=1)
+    gold = db.Column(db.Integer, default=0)
+    xp = db.Column(db.Integer, default=0)
+    rewards = db.relationship("Reward", back_populates="user")
 
     def hash_password(self, password):
         self.password_hash = pwd_context.encrypt(password)
@@ -57,14 +43,6 @@ class User(db.Model):
         user = User.query.get(data['id'])
         return user
 
-    def update_with_json(self, json):
-        if 'email' in json:
-            self.email = json['email']
-        if 'parent_id' in json:
-            self.parent = User.query.get(json['parent_id'])
-        if 'password_hash' in json:
-            self.hash_password(json['password'])
-
     def serialize(self):
         if self.parent is None:
             p = None
@@ -81,7 +59,10 @@ class User(db.Model):
             'quests': [q.serialize() for q in self.quests],
             'parent': p,
             'children': c,
-            'character': self.character
+            'character_name': self.character_name,
+            'character_level': self.character_level,
+            'xp': self.xp,
+            'gold': self.gold
         }
 
     def serialize_recursive(self):
@@ -111,3 +92,15 @@ class Quest(db.Model):
             'confirmed': self.confirmed,
             'difficultyLevel': self.difficulty_level
         }
+
+
+class Reward(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False)
+    cost = db.Column(db.Integer, nullable=False)
+    completed = db.Column(db.Boolean, default=False, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user = db.relationship("User", back_populates="rewards")
+
+    def serialize(self):
+        return dict(id=self.id, name=self.name, cost=self.cost, completed=self.completed)

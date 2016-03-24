@@ -5,10 +5,11 @@ from flask.ext.httpauth import HTTPBasicAuth
 from flask.ext.sqlalchemy import SQLAlchemy, orm
 from sqlalchemy import func
 
-from models import User, Quest, db
+from models import User, Quest, db, Reward
 
 auth = HTTPBasicAuth()
 api = Blueprint('api', __name__, url_prefix="/api")
+
 
 def create_app(config_file='config.py', debug=False):
     app = Flask(__name__)
@@ -19,7 +20,6 @@ def create_app(config_file='config.py', debug=False):
 
     with app.app_context():
         db.create_all()
-
 
     # db.engine.execute("PRAGMA foreign_keys=ON")
     # sm = orm.sessionmaker(bind=db, autoflush=True, autocommit=True, expire_on_commit=True)
@@ -44,7 +44,11 @@ def verify_user(c):
     if c is None:
         abort(404)
     # Check if logged in user is the same as parameterized user.
-    if g.user is None or g.user is not c:
+    if g.user is not None and g.user is c:
+        return True
+    if g.user is c.parent:
+        return True
+    else:
         abort(401)
 
 
@@ -147,10 +151,58 @@ def user_quests(user_id, quest_id):
         if 'confirmed' in json:
             quest.update({"confirmed": json['confirmed']})
         if 'completed' in json:
-            quest.update({"completed": json['completed']})
+            complete_quest(quest.first())
         db.session.commit()
 
         return jsonify(quest.first().serialize())
+
+
+@api.route('/users/<int:user_id>/rewards/', methods=['GET', 'POST'])
+@auth.login_required
+def user_rewards(user_id):
+    user = User.query.get(user_id)
+    verify_user(user)
+
+    if request.method == 'GET':
+        return jsonify(rewards=[r.serialize() for r in user.rewards])
+    elif request.method == 'POST':
+        required_json = ['name', 'cost']
+        json = request.json
+
+        if not valid_json(json, required_json):
+            abort(400)
+
+        reward = Reward(name=json.get('name'), cost=json.get('cost'), user_id=user_id)
+
+        db.session.add(reward)
+        db.session.commit()
+
+        return jsonify(reward.serialize()), 201
+
+
+@api.route('/users/<int:user_id>/rewards/<int:reward_id>/', methods=['GET', 'PUT', 'DELETE'])
+@auth.login_required
+def user_reward(user_id, reward_id):
+    user = User.query.get(user_id)
+    verify_user(user)
+
+    reward = Reward.query.get(reward_id)
+    if reward is None:
+        abort(404, "Reward not found")
+
+    if reward not in user.rewards:
+        abort(401, "Not your reward")
+
+    if request.method == 'GET':
+        return jsonify(reward.serialize())
+    elif request.method == 'PUT':
+        json = request.json
+
+        if 'completed' in json:
+            reward = db.session.query(Reward).filter_by(id=reward_id).first()
+            complete_reward(reward)
+
+        return jsonify(reward.serialize())
 
 
 def valid_json(json, required_json):
@@ -186,20 +238,39 @@ def get_staff_pick():
     return jsonify(quests=staff_pick)
 
 
-def complete_quest(quest):
-    user = quest.user
-    character = user.character
+def complete_reward(reward):
+    user = reward.user
 
-    gold = 100  # TODO: determine gold reward
-    xp = 100  # TODO: determine xp reward
+    if not user.gold >= reward.cost:
+        abort(400, "Not enough gold")
 
-    character.gold += gold
-    character.xp += xp
-
-    character.update({'gold': character.gold})
-    character.update({'xp': character.xp})
+    user.gold -= reward.cost
+    reward.completed = True
 
     db.session.commit()
+
+
+def complete_quest(quest):
+    quest.completed = True
+
+    user = quest.user
+    gold = calculate_gold_reward(quest)
+    xp = calculate_xp_reward(quest)
+
+    user.gold += gold
+    user.xp += xp
+
+    db.session.commit()
+
+
+def calculate_gold_reward(quest):
+    # TODO: Complete this
+    return 100
+
+
+def calculate_xp_reward(quest):
+    # TODO: Complete this
+    return 100
 
 
 if __name__ == '__main__':
