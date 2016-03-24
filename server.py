@@ -2,7 +2,6 @@ import re
 
 from flask import Flask, jsonify, abort, request, g, Blueprint
 from flask.ext.httpauth import HTTPBasicAuth
-from flask.ext.sqlalchemy import SQLAlchemy, orm
 from sqlalchemy import func
 
 from models import User, Quest, db, Reward
@@ -56,8 +55,8 @@ def verify_user(c):
 @auth.login_required
 def get_auth_token():
     token = g.user.generate_auth_token()
-    id = g.user.id
-    return jsonify({'token': token.decode('ascii'), 'id': id})
+    user_id = g.user.id
+    return jsonify({'token': token.decode('ascii'), 'id': user_id})
 
 
 @api.route('/users/', methods=['POST'])

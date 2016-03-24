@@ -1,9 +1,9 @@
-from base64 import b64encode, encode, decode
+from base64 import b64encode
 
 from flask import json
 from flask.ext.testing import TestCase
 
-from models import User, Quest, Reward
+from models import User, Quest
 from server import create_app, db
 
 TEST_EMAIL = 'mike@mike.com'
@@ -23,16 +23,19 @@ class MyTestCase(TestCase):
     def create_app(self):
         return create_app(config_file='test-config.py', debug=True)
 
-    def setUp(self):
+    @staticmethod
+    def setUp():
         db.session.remove()
         db.drop_all()
         db.create_all()
 
-    def tearDown(self):
+    @staticmethod
+    def tearDown():
         db.session.remove()
         db.drop_all()
 
-    def test_database_addition(self):
+    @staticmethod
+    def test_database_addition():
         user = User()
         user.email = TEST_EMAIL
         user.hash_password(TEST_PASSWORD)
@@ -60,11 +63,11 @@ class MyTestCase(TestCase):
         rv = self.client.get('/api/token/', headers=get_auth_header(TEST_EMAIL, TEST_PASSWORD))
         self.assert200(rv)
 
-        id = str(rv.json.get('id'))
+        user_id = str(rv.json.get('id'))
         token = rv.json.get('token')
 
         # Test using auth token to auth
-        url = '/api/users/' + id + '/'
+        url = '/api/users/' + user_id + '/'
         rv = self.client.get(url, headers=get_auth_header(token, "nopassword"))
         self.assert200(rv)
 
@@ -160,9 +163,9 @@ class MyTestCase(TestCase):
     def test_parent_adding_quest(self):
         child = create_child(self)
         parent = create_parent(self)
-        rv = self.client.put('/api/users/' + child['id'] + '/', data=json.dumps(dict(parent_id=parent['id'])),
-                             headers=get_auth_header(child['token'], 'nopassword'),
-                             content_type='application/json')
+        self.client.put('/api/users/' + child['id'] + '/', data=json.dumps(dict(parent_id=parent['id'])),
+                        headers=get_auth_header(child['token'], 'nopassword'),
+                        content_type='application/json')
 
         rv = send_post_request(self, '/api/users/' + child['id'] + '/quests/', TEST_QUEST_DATA,
                                headers=get_auth_header(parent['token'], "nopassword"))
@@ -220,7 +223,7 @@ class MyTestCase(TestCase):
         self.assertFalse(reward.completed)
 
         # Add gold and try again
-        db.session.query(User).filter_by(id=child['id']).update({ "gold": 200})
+        db.session.query(User).filter_by(id=child['id']).update({"gold": 200})
         db.session.commit()
 
         rv = self.client.put(url, data=json.dumps(dict(completed=True)), content_type='application/json',
@@ -230,7 +233,6 @@ class MyTestCase(TestCase):
         reward = db_user.rewards[0]
         self.assertTrue(reward.completed)
         self.assertEqual(db_user.gold, 50)
-
 
 
 def create_child(self, email=None, password=None):
@@ -247,10 +249,10 @@ def create_child(self, email=None, password=None):
     # create child account and get token
     self.client.post('/api/users/', data=json.dumps(data), content_type='application/json')
     rv = self.client.get('/api/token/', headers=get_auth_header(email, password))
-    id = str(rv.json.get('id'))
+    child_id = str(rv.json.get('id'))
     token = rv.json.get('token')
 
-    return dict(id=id, token=token)
+    return dict(id=child_id, token=token)
 
 
 def create_parent(self, email=None, password=None):
@@ -267,10 +269,10 @@ def create_parent(self, email=None, password=None):
     # create child account and get token
     self.client.post('/api/users/', data=json.dumps(data), content_type='application/json')
     rv = self.client.get('/api/token/', headers=get_auth_header(email, password))
-    id = str(rv.json.get('id'))
+    parent_id = str(rv.json.get('id'))
     token = rv.json.get('token')
 
-    return dict(id=id, token=token)
+    return dict(id=parent_id, token=token)
 
 
 def get_auth_header(email, password=None):
