@@ -1,22 +1,31 @@
 import re
 
-from flask import Flask, jsonify, abort, request, g
+from flask import Flask, jsonify, abort, request, g, Blueprint
 from flask.ext.httpauth import HTTPBasicAuth
 from flask.ext.sqlalchemy import SQLAlchemy, orm
 from sqlalchemy import func
 
-from models import User, Quest
-
-app = Flask(__name__)
-app.config.from_pyfile('config.py')
-
-db = SQLAlchemy(app)
-db.init_app(app)
-db.engine.execute("PRAGMA foreign_keys=ON")
-sm = orm.sessionmaker(bind=db, autoflush=True, autocommit=True, expire_on_commit=True)
-session = orm.scoped_session(sm)
+from models import User, Quest, db
 
 auth = HTTPBasicAuth()
+api = Blueprint('api', __name__, url_prefix="/api")
+
+def create_app(config_file='config.py', debug=False):
+    app = Flask(__name__)
+    app.debug = debug
+    app.config.from_pyfile(config_file)
+
+    db.init_app(app)
+
+    with app.app_context():
+        db.create_all()
+
+
+    # db.engine.execute("PRAGMA foreign_keys=ON")
+    # sm = orm.sessionmaker(bind=db, autoflush=True, autocommit=True, expire_on_commit=True)
+    # session = orm.scoped_session(sm)
+    app.register_blueprint(api)
+    return app
 
 
 @auth.verify_password
@@ -39,7 +48,7 @@ def verify_user(c):
         abort(401)
 
 
-@app.route('/token/')
+@api.route('/token/')
 @auth.login_required
 def get_auth_token():
     token = g.user.generate_auth_token()
@@ -47,7 +56,7 @@ def get_auth_token():
     return jsonify({'token': token.decode('ascii'), 'id': id})
 
 
-@app.route('/users/', methods=['POST'])
+@api.route('/users/', methods=['POST'])
 def create_user():
     required_json = ['email', 'password']
     json = request.json
@@ -71,7 +80,7 @@ def create_user():
     return jsonify(user.serialize()), 201
 
 
-@app.route('/users/<int:user_id>/', methods=['GET', 'PUT'])
+@api.route('/users/<int:user_id>/', methods=['GET', 'PUT'])
 @auth.login_required
 def detail_user(user_id):
     user = User.query.get(user_id)
@@ -89,7 +98,7 @@ def detail_user(user_id):
         return jsonify(user.serialize())
 
 
-@app.route('/users/<int:user_id>/quests/', methods=['POST', 'GET'])
+@api.route('/users/<int:user_id>/quests/', methods=['POST', 'GET'])
 @auth.login_required
 def add_quest_to_user(user_id):
     user = User.query.get(user_id)
@@ -116,7 +125,7 @@ def add_quest_to_user(user_id):
         return jsonify(quest.serialize()), 201
 
 
-@app.route('/users/<int:user_id>/quests/<int:quest_id>/', methods=['GET', 'PUT'])
+@api.route('/users/<int:user_id>/quests/<int:quest_id>/', methods=['GET', 'PUT'])
 @auth.login_required
 def user_quests(user_id, quest_id):
     user = User.query.get(user_id)
@@ -153,14 +162,14 @@ def valid_json(json, required_json):
         return True
 
 
-@app.route('/quests/trending/', methods=['GET'])
+@api.route('/quests/trending/', methods=['GET'])
 def trending_quests():
     quests = db.session.query(Quest.title, func.count(Quest.title)).group_by(Quest.title).all()
     qs = [dict(title=q.title, difficulty_level="Medium") for q in quests]
     return jsonify(quests=qs)
 
 
-@app.route('/quests/staff_pick', methods=['GET'])
+@api.route('/quests/staff_pick/', methods=['GET'])
 def get_staff_pick():
     staff_pick = [
         {"title": "Clean your room",
@@ -177,5 +186,22 @@ def get_staff_pick():
     return jsonify(quests=staff_pick)
 
 
+def complete_quest(quest):
+    user = quest.user
+    character = user.character
+
+    gold = 100  # TODO: determine gold reward
+    xp = 100  # TODO: determine xp reward
+
+    character.gold += gold
+    character.xp += xp
+
+    character.update({'gold': character.gold})
+    character.update({'xp': character.xp})
+
+    db.session.commit()
+
+
 if __name__ == '__main__':
+    app = create_app()
     app.run(host='0.0.0.0')

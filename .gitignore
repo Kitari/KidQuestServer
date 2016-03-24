@@ -2,3 +2,4 @@
 kidquest.db
 *.pyc
 app.sqlite
+test-app.sqlite
