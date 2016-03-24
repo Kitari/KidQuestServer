@@ -8,6 +8,24 @@ from config import SECRET_KEY
 db = SQLAlchemy()
 
 
+class Character(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    character_name = db.Column(db.String(64))
+    character_level = db.Column(db.Integer, default=1)
+    gold = db.Column(db.Integer, default=0)
+    xp = db.Column(db.Integer, default=0)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+
+    def serialize(self):
+        return {
+            'id': self.id,
+            'character_name': self.character_name,
+            'character_level': self.character_level,
+            'gold': self.gold,
+            'xp': self.xp
+        }
+
+
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(120), nullable=False)
@@ -15,6 +33,7 @@ class User(db.Model):
     parent = db.relation("User", remote_side=[id])
     quests = db.relationship("Quest", back_populates="user")
     password_hash = db.Column(db.String(128))
+    character = db.relationship("Character", uselist=False, backref="user")
 
     def hash_password(self, password):
         self.password_hash = pwd_context.encrypt(password)
@@ -61,7 +80,8 @@ class User(db.Model):
             'email': self.email,
             'quests': [q.serialize() for q in self.quests],
             'parent': p,
-            'children': c
+            'children': c,
+            'character': self.character
         }
 
     def serialize_recursive(self):
