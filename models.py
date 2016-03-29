@@ -20,6 +20,7 @@ class User(db.Model):
     gold = db.Column(db.Integer, default=0)
     xp = db.Column(db.Integer, default=0)
     rewards = db.relationship("Reward", back_populates="user")
+    gcm_id = db.Column(db.String(128), nullable=False)
 
     def hash_password(self, password):
         self.password_hash = pwd_context.encrypt(password)

@@ -3,7 +3,9 @@ import re
 from flask import Flask, jsonify, abort, request, g, Blueprint
 from flask.ext.httpauth import HTTPBasicAuth
 from sqlalchemy import func
+from gcm import GCM
 
+from config import GCM_API_KEY
 from models import User, Quest, db, Reward
 
 XP_REQUIRED_COEFFICIENT = 100
@@ -65,7 +67,7 @@ def get_auth_token():
 
 @api.route('/users/', methods=['POST'])
 def create_user():
-    required_json = ['email', 'password']
+    required_json = ['email', 'password', 'gcm_id']
     json = request.json
 
     if not valid_json(json, required_json):
@@ -78,9 +80,9 @@ def create_user():
         abort(400, "Invalid email")
 
     if User.query.filter_by(email=email).first() is not None:
-        abort(409)  # existing user
+        abort(409, "Email already exists")  # existing user
 
-    user = User(email=email)
+    user = User(email=email, gcm_id=json.get('gcm_id'))
     user.hash_password(password)
     db.session.add(user)
     db.session.commit()
@@ -132,6 +134,8 @@ def add_quest_to_user(user_id):
         db.session.add(quest)
         db.session.commit()
 
+        notify_if_partner(user, "A new quest is available!")
+
         return jsonify(quest.serialize()), 201
 
 
@@ -156,8 +160,10 @@ def user_quests(user_id, quest_id):
         quest = db.session.query(Quest).filter_by(id=quest_id)
         if 'confirmed' in json:
             quest.update({"confirmed": json['confirmed']})
+            notify_if_partner(user, "A child you are monitoring has completed a task and requires approval")
         if 'completed' in json:
             complete_quest(quest.first())
+            # notifies in the method
         db.session.commit()
 
         return jsonify(quest.first().serialize())
@@ -183,10 +189,12 @@ def user_rewards(user_id):
         db.session.add(reward)
         db.session.commit()
 
+        notify_if_partner(user, "A new reward is available in the store!")
+
         return jsonify(reward.serialize()), 201
 
 
-@api.route('/users/<int:user_id>/rewards/<int:reward_id>/', methods=['GET', 'PUT', 'DELETE'])
+@api.route('/users/<int:user_id>/rewards/<int:reward_id>/', methods=['GET', 'PUT'])
 @auth.login_required
 def user_reward(user_id, reward_id):
     user = User.query.get(user_id)
@@ -207,6 +215,7 @@ def user_reward(user_id, reward_id):
         if 'completed' in json:
             reward = db.session.query(Reward).filter_by(id=reward_id).first()
             complete_reward(reward)
+            notify_if_partner(user, "A child you are monitoring has purchased a reward from the store")
 
         return jsonify(reward.serialize())
 
@@ -259,10 +268,11 @@ def complete_reward(reward):
 def level_up(user):
     user.character_level += 1
     db.session.commit()
-    # TODO: Send notification
+
+    notify_if_partner(user, "You have levelled up!")
 
 
-def complete_quest(quest, parent=False):
+def complete_quest(quest):
     quest.completed = True
 
     user = quest.user
@@ -277,9 +287,7 @@ def complete_quest(quest, parent=False):
 
     db.session.commit()
 
-    if parent:
-        # TODO: Send notification
-        pass
+    notify_if_partner(user, "You have completed a quest!")
 
 
 def calculate_gold_reward(diff, owner):
@@ -313,6 +321,34 @@ def xp_to_next_level(level):
         sum_ += i
 
     return sum_ * XP_REQUIRED_COEFFICIENT
+
+
+def notify_if_partner(user, message):
+    u = get_partnered_user(user)
+    if u:
+        notify_user(u, message)
+
+
+def notify_user(destination_user, message):
+    gcm = GCM(GCM_API_KEY)
+    reg_id = [destination_user.gcm_id]
+
+    data = {'message': message}
+
+    if destination_user.gcm_id == 'TESTACCOUNT':
+        print('Notification sent to test account, destination=' + destination_user.email + ', message=' + message)
+    else:
+        response = gcm.json_request(registration_ids=reg_id, data=data)
+
+    # TODO: Check response for errors
+
+
+def get_partnered_user(user):
+    if user.parent is not None:
+        return user.parent
+    d = db.session.query(User).filter_by(parent_id=user.id).all()
+    if len(d) > 0:
+        return d[1]
 
 
 if __name__ == '__main__':

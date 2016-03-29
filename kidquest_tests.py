@@ -39,6 +39,7 @@ class MyTestCase(TestCase):
         user = User()
         user.email = TEST_EMAIL
         user.hash_password(TEST_PASSWORD)
+        user.gcm_id = "TESTACCOUNT"
         db.session.add(user)
         db.session.commit()
 
@@ -47,7 +48,8 @@ class MyTestCase(TestCase):
     def test_add_user(self):
         data = {
             'email': TEST_EMAIL,
-            'password': TEST_PASSWORD
+            'password': TEST_PASSWORD,
+            'gcm_id': "TESTACCOUNT"
         }
 
         # Test adding a user
@@ -72,7 +74,8 @@ class MyTestCase(TestCase):
         self.assert200(rv)
 
         # Test invalid email
-        rv = self.client.post('/api/users/', data=json.dumps(dict(email="bademail", password="password")),
+        invalid_user_data = dict(email="bademail", password="password", gcm_id="TESTACCOUNT")
+        rv = self.client.post('/api/users/', data=json.dumps(invalid_user_data),
                               content_type='application/json')
         self.assert400(rv)
 
@@ -96,7 +99,8 @@ class MyTestCase(TestCase):
 
         parent_data = {
             'email': TEST_PARENT_EMAIL,
-            'password': TEST_PARENT_PASSWORD
+            'password': TEST_PARENT_PASSWORD,
+            'gcm_id': "TESTACCOUNT"
         }
         # create parent account and get token
         self.client.post('/api/users/', data=json.dumps(parent_data), content_type='application/json')
@@ -244,11 +248,6 @@ class MyTestCase(TestCase):
         self.assertEqual(xp_to_next_level(4), 600)
         self.assertEqual(xp_to_next_level(5), 1000)
 
-        child = create_child(self)
-
-
-
-
 
 def create_child(self, email=None, password=None):
     if email is None:
@@ -258,7 +257,8 @@ def create_child(self, email=None, password=None):
 
     data = {
         'email': email,
-        'password': password
+        'password': password,
+        'gcm_id': "TESTACCOUNT"
     }
 
     # create child account and get token
@@ -278,7 +278,8 @@ def create_parent(self, email=None, password=None):
 
     data = {
         'email': email,
-        'password': password
+        'password': password,
+        'gcm_id': "TESTACCOUNT"
     }
 
     # create child account and get token
