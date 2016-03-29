@@ -6,8 +6,12 @@ from sqlalchemy import func
 
 from models import User, Quest, db, Reward
 
+XP_REQUIRED_COEFFICIENT = 100
+
 auth = HTTPBasicAuth()
 api = Blueprint('api', __name__, url_prefix="/api")
+
+LEVEL_GAIN = 0.04
 
 
 def create_app(config_file='config.py', debug=False):
@@ -117,7 +121,10 @@ def add_quest_to_user(user_id):
         if not valid_json(json, required_json):
             abort(400)
 
-        quest = Quest(title=json.get('title'), user_id=user_id, difficulty_level=json.get('difficulty_level'))
+        diff = json.get('difficulty_level')
+        quest = Quest(title=json.get('title'), user_id=user_id, difficulty_level=diff)
+        quest.xp_reward = calculate_xp_reward(diff, user)
+        quest.gold_reward = calculate_gold_reward(diff, user)
 
         if json['description']:
             quest.description = json['description']
@@ -249,27 +256,63 @@ def complete_reward(reward):
     db.session.commit()
 
 
-def complete_quest(quest):
+def level_up(user):
+    user.character_level += 1
+    db.session.commit()
+    # TODO: Send notification
+
+
+def complete_quest(quest, parent=False):
     quest.completed = True
 
     user = quest.user
-    gold = calculate_gold_reward(quest)
-    xp = calculate_xp_reward(quest)
 
-    user.gold += gold
-    user.xp += xp
+    user.gold += quest.gold_reward
+    user.xp += quest.xp_reward
+
+    xp_needed = xp_to_next_level(user.character_level + 1)
+
+    if user.xp >= xp_needed:
+        level_up(user)
 
     db.session.commit()
 
+    if parent:
+        # TODO: Send notification
+        pass
 
-def calculate_gold_reward(quest):
+
+def calculate_gold_reward(diff, owner):
     # TODO: Complete this
     return 100
 
 
-def calculate_xp_reward(quest):
-    # TODO: Complete this
-    return 100
+def calculate_xp_reward(diff, owner):
+    if diff == 'Very Easy':
+        reward = 100
+    elif diff == 'Easy':
+        reward = 300
+    elif diff == 'Medium':
+        reward = 600
+    elif diff == 'Hard':
+        reward = 1000
+    elif diff == 'Very Hard':
+        reward = 1500
+    else:
+        raise ValueError("No difficulty level match for quest. Found diff: " + diff)
+
+    reward *= ((owner.character_level - 1) / 100 + 1)  # Slightly increase gold reward based on level
+
+    return reward
+
+
+def xp_to_next_level(level):
+    """ Returns the XP needed for next level """
+    sum_ = 0
+    for i in range(level):
+        sum_ += i
+
+    return sum_ * XP_REQUIRED_COEFFICIENT
 
 
 if __name__ == '__main__':

@@ -4,7 +4,7 @@ from flask import json
 from flask.ext.testing import TestCase
 
 from models import User, Quest
-from server import create_app, db
+from server import create_app, db, xp_to_next_level
 
 TEST_EMAIL = 'mike@mike.com'
 TEST_PASSWORD = 'potatoes'
@@ -14,7 +14,7 @@ TEST_PARENT_PASSWORD = 'cabbages'
 
 TEST_QUEST_DATA = {
     'title': 'Test Quest',
-    'difficulty_level': 'Easy',
+    'difficulty_level': 'Very Easy',
     'description': 'Clean your room'
 }
 
@@ -133,6 +133,8 @@ class MyTestCase(TestCase):
         # Check quest is saved
         quest = db.session.query(Quest).filter_by(id=quest_id).first()
         self.assertEqual(rv.json, quest.serialize())
+        self.assertIsNotNone(quest.xp_reward)
+        self.assertIsNotNone(quest.gold_reward)
 
         # Test quest confirming
         data = dict(confirmed=True)
@@ -158,7 +160,8 @@ class MyTestCase(TestCase):
 
         # Test XP and Gold Gain
         self.assertTrue(db_user.gold > old_gold)
-        self.assertTrue(db_user.xp > old_xp)
+        self.assertEqual(db_user.xp, 100)
+        self.assertEqual(db_user.character_level, 2)
 
     def test_parent_adding_quest(self):
         child = create_child(self)
@@ -233,6 +236,18 @@ class MyTestCase(TestCase):
         reward = db_user.rewards[0]
         self.assertTrue(reward.completed)
         self.assertEqual(db_user.gold, 50)
+
+    def test_level(self):
+        self.assertEqual(xp_to_next_level(1), 0)
+        self.assertEqual(xp_to_next_level(2), 100)
+        self.assertEqual(xp_to_next_level(3), 300)
+        self.assertEqual(xp_to_next_level(4), 600)
+        self.assertEqual(xp_to_next_level(5), 1000)
+
+        child = create_child(self)
+
+
+
 
 
 def create_child(self, email=None, password=None):

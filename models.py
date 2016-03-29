@@ -82,6 +82,8 @@ class Quest(db.Model):
     confirmed = db.Column(db.Boolean, nullable=False, default=False)
     description = db.Column(db.String(120), nullable=True)
     difficulty_level = db.Column(db.String(50), nullable=False, default="Medium")
+    xp_reward = db.Column(db.Integer, nullable=False)
+    gold_reward = db.Column(db.Integer, nullable=False)
 
     def serialize(self):
         return {
@@ -90,7 +92,9 @@ class Quest(db.Model):
             'description': self.description,
             'completed': self.completed,
             'confirmed': self.confirmed,
-            'difficultyLevel': self.difficulty_level
+            'difficultyLevel': self.difficulty_level,
+            'xp_reward': self.xp_reward,
+            'gold_reward': self.gold_reward
         }
 
 
