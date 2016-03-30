@@ -20,7 +20,8 @@ class User(db.Model):
     gold = db.Column(db.Integer, default=0)
     xp = db.Column(db.Integer, default=0)
     rewards = db.relationship("Reward", back_populates="user")
-    gcm_id = db.Column(db.String(128), nullable=False)
+    gcm_id = db.Column(db.String(128), nullable=True)
+    parent_pin = db.Column(db.String(4), nullable=True)
 
     def hash_password(self, password):
         self.password_hash = pwd_context.encrypt(password)
@@ -63,7 +64,8 @@ class User(db.Model):
             'character_name': self.character_name,
             'character_level': self.character_level,
             'xp': self.xp,
-            'gold': self.gold
+            'gold': self.gold,
+            'parent_pin': self.parent_pin
         }
 
     def serialize_recursive(self):

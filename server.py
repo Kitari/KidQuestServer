@@ -26,9 +26,6 @@ def create_app(config_file='config.py', debug=False):
     with app.app_context():
         db.create_all()
 
-    # db.engine.execute("PRAGMA foreign_keys=ON")
-    # sm = orm.sessionmaker(bind=db, autoflush=True, autocommit=True, expire_on_commit=True)
-    # session = orm.scoped_session(sm)
     app.register_blueprint(api)
     return app
 
@@ -67,7 +64,7 @@ def get_auth_token():
 
 @api.route('/users/', methods=['POST'])
 def create_user():
-    required_json = ['email', 'password', 'gcm_id']
+    required_json = ['email', 'password']
     json = request.json
 
     if not valid_json(json, required_json):
@@ -102,6 +99,9 @@ def detail_user(user_id):
         json = request.json
         if 'parent_id' in json:
             db.session.query(User).filter_by(id=user_id).update({"parent_id": json['parent_id']})
+
+        if 'gcm_id' in json:
+            db.session.query(User).filter_by(id=user_id).update({"gcm_id": json['gcm_id']})
 
         db.session.commit()
         return jsonify(user.serialize())
