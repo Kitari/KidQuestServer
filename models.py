@@ -1,6 +1,9 @@
+import datetime
+
 from flask.ext.sqlalchemy import SQLAlchemy
 from itsdangerous import JSONWebSignatureSerializer, SignatureExpired, BadSignature
 from passlib.apps import custom_app_context as pwd_context
+from sqlalchemy import desc
 from sqlalchemy.orm import object_session
 
 from config import SECRET_KEY
@@ -75,6 +78,35 @@ class User(db.Model):
             'quests': [q.serialize() for q in self.quests]
         }
 
+    def is_parent(self):
+        """
+        :rtype: bool
+        """
+        if self.parent is not None:
+            # Is a child
+            return False
+        session = object_session(self)
+        d = session.query(User).filter_by(parent_id=self.id).all()
+        if len(d) > 0:
+            # Has children, must be a parent
+            return True
+
+        return False
+
+    def get_child(self):
+        if not self.is_parent():
+            return None
+        session = object_session(self)
+        d = session.query(User).filter_by(parent_id=self.id).all()
+
+        return d[0]
+
+
+def calc_expiry():
+    utcnow = datetime.datetime.utcnow()
+    timedelta = datetime.timedelta(days=7)
+    return utcnow + timedelta
+
 
 class Quest(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -87,9 +119,13 @@ class Quest(db.Model):
     difficulty_level = db.Column(db.String(50), nullable=False, default="Medium")
     xp_reward = db.Column(db.Integer, nullable=False)
     gold_reward = db.Column(db.Integer, nullable=False)
+    created_date = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    expiry_date = db.Column(db.DateTime, nullable=False, default=calc_expiry())
+    completed_date = db.Column(db.DateTime, nullable=True)
+    actual_reward = db.Column(db.Integer, nullable=True)
 
     def serialize(self):
-        return {
+        quest = {
             'id': self.id,
             'title': self.title,
             'description': self.description,
@@ -97,8 +133,81 @@ class Quest(db.Model):
             'confirmed': self.confirmed,
             'difficultyLevel': self.difficulty_level,
             'xp_reward': self.xp_reward,
-            'gold_reward': self.gold_reward
+            'gold_reward': self.gold_reward,
+            'created_date': None,
+            'expiryDate': None,
+            'completed_date': None,
+            'current_reward': self.get_current_reward()
         }
+
+        if self.created_date is not None:
+            quest['created_date'] = self.created_date.strftime("%Y-%m-%d %H:%M:%S")
+        if self.expiry_date is not None:
+            quest['expiryDate'] = self.expiry_date.strftime("%Y-%m-%d %H:%M:%S")
+        if self.completed_date is not None:
+            quest['completed_date'] = self.completed_date.strftime("%Y-%m-%d %H:%M:%S")
+
+        return quest
+
+    def get_current_reward(self):
+        if datetime.datetime.utcnow() > self.expiry_date:
+            return 0
+
+        time_left = self.expiry_date - datetime.datetime.now()
+        total = self.expiry_date - self.created_date
+
+        time_multiplier = (time_left / total) * 2
+
+        # means quest rewards don't diminish until half time is left
+        if time_multiplier > 1:
+            time_multiplier = 1
+
+        # gets last 5 quests where completed
+        quests = self.get_last_5_quests()
+
+        # just give max reward if user hasn't finished/failed more than 5 quests
+        if len(quests) < 5:
+            return self.gold_reward * time_multiplier
+        else:
+
+            base_coefficient = 0.6
+            first_coefficient = 0.25
+            second_coefficient = 0.15
+            third_coefficient = 0
+            fourth_coefficient = 0
+            fifth_coefficient = 0
+
+            base_reward = base_coefficient * self.gold_reward
+            first_reward = self.calc_closed_loop_per_quest(first_coefficient, quests[0])
+            second_reward = self.calc_closed_loop_per_quest(second_coefficient, quests[1])
+            third_reward = self.calc_closed_loop_per_quest(third_coefficient, quests[2])
+            fourth_reward = self.calc_closed_loop_per_quest(fourth_coefficient, quests[3])
+            fifth_reward = self.calc_closed_loop_per_quest(fifth_coefficient, quests[4])
+
+            reward = base_reward + first_reward + second_reward + third_reward + fourth_reward + fifth_reward
+            return reward * time_multiplier
+
+    def get_last_5_quests(self):
+        session = object_session(self)
+
+        completed_quests = session.query(Quest).filter_by(user=self.user).filter_by(confirmed=True).order_by(
+            desc(Quest.completed_date)).limit(5).all()
+
+        # gets last 5 quests that were not completed and have expired
+        current_time = datetime.datetime.now()
+        expired_quests = session.query(Quest).filter_by(user=self.user).filter_by(confirmed=False).filter(
+            Quest.expiry_date < current_time).order_by(desc(Quest.expiry_date)).limit(5).all()
+
+        quests = completed_quests
+        for q in expired_quests:
+            q.completed_date = q.expiry_date
+            quests.append(q)
+        quests.sort(key=lambda x: x.completed_date, reverse=True)
+        return quests[:5]
+
+
+def calc_closed_loop_per_quest(self, coefficient, old_quest):
+    return coefficient * old_quest.actual_reward / old_quest.gold_reward * self.gold_reward
 
 
 class Reward(db.Model):

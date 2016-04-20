@@ -1,10 +1,11 @@
+import datetime
 from base64 import b64encode
 
 from flask import json
 from flask.ext.testing import TestCase
 
 from models import User, Quest
-from server import create_app, db, xp_to_next_level
+from server import create_app, db, xp_to_next_level, confirm_quest, complete_quest
 
 TEST_EMAIL = 'mike@mike.com'
 TEST_PASSWORD = 'potatoes'
@@ -141,24 +142,24 @@ class MyTestCase(TestCase):
         self.assertIsNotNone(quest.gold_reward)
 
         # Test quest confirming
-        data = dict(confirmed=True)
-        rv = self.client.put('api/users/' + child['id'] + '/quests/' + quest_id + '/', data=json.dumps(data),
-                             headers=get_auth_header(child['token']), content_type='application/json')
-        self.assert200(rv)
-        quest = db.session.query(Quest).filter_by(id=quest_id).first()
-        self.assertEqual(quest.confirmed, True)
-
-        db_user = db.session.query(User).filter_by(id=child['id']).first()
-        old_gold = db_user.gold
-        old_xp = db_user.xp
-
-        # Test children can complete quest
         data = dict(completed=True)
         rv = self.client.put('api/users/' + child['id'] + '/quests/' + quest_id + '/', data=json.dumps(data),
                              headers=get_auth_header(child['token']), content_type='application/json')
         self.assert200(rv)
         quest = db.session.query(Quest).filter_by(id=quest_id).first()
         self.assertEqual(quest.completed, True)
+
+        db_user = db.session.query(User).filter_by(id=child['id']).first()
+        old_gold = db_user.gold
+        old_xp = db_user.xp
+
+        # Test children can complete quest
+        data = dict(confirmed=True)
+        rv = self.client.put('api/users/' + child['id'] + '/quests/' + quest_id + '/', data=json.dumps(data),
+                             headers=get_auth_header(child['token']), content_type='application/json')
+        self.assert200(rv)
+        quest = db.session.query(Quest).filter_by(id=quest_id).first()
+        self.assertEqual(quest.confirmed, True)
 
         db_user = db.session.query(User).filter_by(id=child['id']).first()
 
@@ -247,6 +248,60 @@ class MyTestCase(TestCase):
         self.assertEqual(xp_to_next_level(3), 300)
         self.assertEqual(xp_to_next_level(4), 600)
         self.assertEqual(xp_to_next_level(5), 1000)
+
+    def test_quest_expiry(self):
+        child = create_child(self)
+        quest = self.create_quest(child)
+
+        quest.expiry_date = datetime.datetime.utcnow() - datetime.timedelta(days=1)
+
+        current_reward = quest.get_current_reward()
+
+        self.assertEqual(current_reward, 0)
+
+        # set up so halfway through time period
+        quest.expiry_date = datetime.datetime.utcnow() + datetime.timedelta(days=1)
+        quest.created_date = datetime.datetime.utcnow() - datetime.timedelta(days=1)
+
+        current_reward = quest.get_current_reward()
+
+        self.assertGreater(current_reward, 0)
+        self.assertLess(current_reward, quest.gold_reward)
+
+        quests = [quest]
+        for i in range(6):
+            quests.append(self.create_quest(child))
+
+        # test the test
+        self.assertGreater(len(quests), 5)
+
+        complete_quest(quests[0])
+        confirm_quest(quests[0])
+        complete_quest(quests[1])
+        confirm_quest(quests[1])
+        quests[3].expiry_date = datetime.datetime.utcnow() - datetime.timedelta(days=1)
+        complete_quest(quests[4])
+        confirm_quest(quests[4])
+        complete_quest(quests[5])
+        confirm_quest(quests[5])
+
+        finished_or_expired_quests = [quests[5], quests[4], quests[1], quests[0], quests[3]]
+
+        self.assertEqual(str(quest.get_last_5_quests()), str(finished_or_expired_quests))
+
+        confirm_quest(quests[6])
+        complete_quest(quests[6])
+
+        finished_or_expired_quests = [quests[6], quests[5], quests[4], quests[1], quests[0]]
+
+        self.assertEqual(quest.get_last_5_quests(), finished_or_expired_quests)
+
+    def create_quest(self, child):
+        rv = self.client.post('/api/users/' + child['id'] + '/quests/', data=json.dumps(TEST_QUEST_DATA),
+                              content_type='application/json', headers=get_auth_header(child['token'], 'nopassword'))
+        quest_id = str(rv.json.get('id'))
+        quest = db.session.query(Quest).filter_by(id=quest_id).first()
+        return quest
 
 
 def create_child(self, email=None, password=None):

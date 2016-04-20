@@ -1,9 +1,10 @@
+import datetime
 import re
 
 from flask import Flask, jsonify, abort, request, g, Blueprint
 from flask.ext.httpauth import HTTPBasicAuth
-from sqlalchemy import func
 from gcm import GCM
+from sqlalchemy import func
 
 from config import GCM_API_KEY
 from models import User, Quest, db, Reward
@@ -44,7 +45,7 @@ def verify_password(email_or_token, password):
 
 def verify_user(c):
     if c is None:
-        abort(404)
+        abort(400)
     # Check if logged in user is the same as parameterized user.
     if g.user is not None and g.user is c:
         return True
@@ -58,8 +59,16 @@ def verify_user(c):
 @auth.login_required
 def get_auth_token():
     token = g.user.generate_auth_token()
-    user_id = g.user.id
-    return jsonify({'token': token.decode('ascii'), 'id': user_id})
+
+    user_is_parent = g.user.is_parent()
+
+    if user_is_parent:
+        user_id = g.user.get_child().id
+    else:
+        user_id = g.user.id
+
+    return jsonify({'token': token.decode('ascii'), 'id': user_id, 'parent_pin': g.user.parent_pin,
+                    'is_parent': user_is_parent})
 
 
 @api.route('/users/', methods=['POST'])
@@ -125,8 +134,10 @@ def add_quest_to_user(user_id):
 
         diff = json.get('difficulty_level')
         quest = Quest(title=json.get('title'), user_id=user_id, difficulty_level=diff)
+        if 'expiry_date' in json:
+            quest.expiry_date = json.get('expiry_date')
         quest.xp_reward = calculate_xp_reward(diff, user)
-        quest.gold_reward = calculate_gold_reward(diff, user)
+        quest.gold_reward = calc_triangular_difficulty(diff)
 
         if json['description']:
             quest.description = json['description']
@@ -147,7 +158,7 @@ def user_quests(user_id, quest_id):
 
     quest = Quest.query.get(quest_id)
     if quest is None:
-        abort(404)
+        abort(400)
 
     if quest not in user.quests:
         abort(401)
@@ -158,11 +169,10 @@ def user_quests(user_id, quest_id):
         json = request.json
 
         quest = db.session.query(Quest).filter_by(id=quest_id)
-        if 'confirmed' in json:
-            quest.update({"confirmed": json['confirmed']})
-            notify_if_partner(user, "A child you are monitoring has completed a task and requires approval")
         if 'completed' in json:
             complete_quest(quest.first())
+        if 'confirmed' in json:
+            confirm_quest(quest.first())
             # notifies in the method
         db.session.commit()
 
@@ -202,7 +212,7 @@ def user_reward(user_id, reward_id):
 
     reward = Reward.query.get(reward_id)
     if reward is None:
-        abort(404, "Reward not found")
+        abort(400, "Reward not found")
 
     if reward not in user.rewards:
         abort(401, "Not your reward")
@@ -221,6 +231,10 @@ def user_reward(user_id, reward_id):
 
 
 def valid_json(json, required_json):
+    """
+
+    :rtype: bool
+    """
     if not json:
         return False
     elif any(x not in json for x in required_json):
@@ -272,8 +286,8 @@ def level_up(user):
     notify_if_partner(user, "You have levelled up!")
 
 
-def complete_quest(quest):
-    quest.completed = True
+def confirm_quest(quest):
+    quest.confirmed = True
 
     user = quest.user
 
@@ -290,24 +304,32 @@ def complete_quest(quest):
     notify_if_partner(user, "You have completed a quest!")
 
 
-def calculate_gold_reward(diff, owner):
-    # TODO: Complete this
-    return 100
+def complete_quest(quest):
+    quest.completed = True
+    quest.completed_date = datetime.datetime.utcnow()
+    db.session.commit()
+    notify_if_partner(quest.user, "A child you are monitoring has completed a task and requires approval")
 
 
-def calculate_xp_reward(diff, owner):
-    if diff == 'Very Easy':
+def calc_triangular_difficulty(diff):
+    if diff == 'Very Easy' or diff == 'VERY_EASY':
         reward = 100
-    elif diff == 'Easy':
+    elif diff == 'Easy' or diff == 'EASY':
         reward = 300
-    elif diff == 'Medium':
+    elif diff == 'Medium' or diff == 'MEDIUM':
         reward = 600
-    elif diff == 'Hard':
+    elif diff == 'Hard' or diff == 'HARD':
         reward = 1000
-    elif diff == 'Very Hard':
+    elif diff == 'Very Hard' or diff == 'VERY_HARD':
         reward = 1500
     else:
         raise ValueError("No difficulty level match for quest. Found diff: " + diff)
+
+    return reward
+
+
+def calculate_xp_reward(diff, owner):
+    reward = calc_triangular_difficulty(diff)
 
     reward *= ((owner.character_level - 1) / 100 + 1)  # Slightly increase gold reward based on level
 
@@ -340,7 +362,7 @@ def notify_user(destination_user, message):
     else:
         response = gcm.json_request(registration_ids=reg_id, data=data)
 
-    # TODO: Check response for errors
+        # TODO: Check response for errors
 
 
 def get_partnered_user(user):
