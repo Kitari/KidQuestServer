@@ -5,7 +5,7 @@ from flask import json
 from flask.ext.testing import TestCase
 
 from models import User, Quest
-from server import create_app, db, xp_to_next_level, confirm_quest, complete_quest
+from server import create_app, db, xp_to_next_level, confirm_quest, complete_quest, calc_triangular_difficulty
 
 TEST_EMAIL = 'mike@mike.com'
 TEST_PASSWORD = 'potatoes'
@@ -296,12 +296,33 @@ class MyTestCase(TestCase):
 
         self.assertEqual(quest.get_last_5_quests(), finished_or_expired_quests)
 
+    def test_preset_quests(self):
+        rv = self.client.get('/api/quests/getStaffPick/')
+
+        quests = rv.json.get('quests')
+
+        self.assertIsNotNone(quests)
+        self.assertEqual(len(quests), 5)
+        self.assertIsNotNone(quests[0].get('title'))
+
     def create_quest(self, child):
         rv = self.client.post('/api/users/' + child['id'] + '/quests/', data=json.dumps(TEST_QUEST_DATA),
                               content_type='application/json', headers=get_auth_header(child['token'], 'nopassword'))
         quest_id = str(rv.json.get('id'))
         quest = db.session.query(Quest).filter_by(id=quest_id).first()
         return quest
+
+    def test_triangle_calc(self):
+        self.assertEqual(calc_triangular_difficulty('Very Easy'), 100)
+        self.assertEqual(calc_triangular_difficulty('Easy'), 300)
+        self.assertEqual(calc_triangular_difficulty('Medium'), 600)
+        self.assertEqual(calc_triangular_difficulty('Hard'), 1000)
+        self.assertEqual(calc_triangular_difficulty('Very Hard'), 1500)
+
+        self.assertEqual(calc_triangular_difficulty('Very Easy'), calc_triangular_difficulty('VERY_EASY'))
+
+        with self.assertRaises(ValueError):
+            calc_triangular_difficulty('BAD DIFFICULTY')
 
 
 def create_child(self, email=None, password=None):

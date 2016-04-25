@@ -182,10 +182,13 @@ def user_quests(user_id, quest_id):
 @api.route('/users/<int:user_id>/rewards/', methods=['GET', 'POST'])
 @auth.login_required
 def user_rewards(user_id):
+    # Get the user account relevant to the user_id parameter
     user = User.query.get(user_id)
+    # Verify the logged in user is actually the user or an attached user.
     verify_user(user)
 
     if request.method == 'GET':
+        # Return the user's rewards in JSON format.
         return jsonify(rewards=[r.serialize() for r in user.rewards])
     elif request.method == 'POST':
         required_json = ['name', 'cost']
@@ -243,14 +246,14 @@ def valid_json(json, required_json):
         return True
 
 
-@api.route('/quests/trending/', methods=['GET'])
+@api.route('/quests/getTrending/', methods=['GET'])
 def trending_quests():
     quests = db.session.query(Quest.title, func.count(Quest.title)).group_by(Quest.title).all()
     qs = [dict(title=q.title, difficulty_level="Medium") for q in quests]
     return jsonify(quests=qs)
 
 
-@api.route('/quests/staff_pick/', methods=['GET'])
+@api.route('/quests/getStaffPick/', methods=['GET'])
 def get_staff_pick():
     staff_pick = [
         {"title": "Clean your room",
