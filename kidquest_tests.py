@@ -168,6 +168,20 @@ class MyTestCase(TestCase):
         self.assertEqual(db_user.xp, 100)
         self.assertEqual(db_user.character_level, 2)
 
+        # test invalid quest no json
+        rv = self.client.post('/api/users/' + child['id'] + '/quests/',
+                              headers=get_auth_header(child['token'], 'nopassword'))
+        self.assert400(rv)
+
+        bad_quest_data = {
+            "title": "testtitle"
+        }
+
+        rv = self.client.post('/api/users/' + child['id'] + '/quests/', data=json.dumps(bad_quest_data),
+                              content_type='application/json', headers=get_auth_header(child['token'], 'nopassword'))
+
+        self.assert400(rv)
+
     def test_parent_adding_quest(self):
         child = create_child(self)
         parent = create_parent(self)
