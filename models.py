@@ -10,6 +10,8 @@ from config import SECRET_KEY
 
 db = SQLAlchemy()
 
+XP_REQUIRED_COEFFICIENT = 100
+
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -68,7 +70,8 @@ class User(db.Model):
             'character_level': self.character_level,
             'xp': self.xp,
             'gold': self.gold,
-            'parent_pin': self.parent_pin
+            'parent_pin': self.parent_pin,
+            'xp_required': self.xp_to_next_level()
         }
 
     def serialize_recursive(self):
@@ -100,6 +103,14 @@ class User(db.Model):
         d = session.query(User).filter_by(parent_id=self.id).all()
 
         return d[0]
+
+    def xp_to_next_level(self):
+        """ Returns the XP needed for next level """
+        sum_ = 0
+        for i in range(self.character_level + 1):
+            sum_ += i
+
+        return sum_ * XP_REQUIRED_COEFFICIENT
 
 
 def calc_expiry():

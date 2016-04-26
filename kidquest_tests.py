@@ -5,7 +5,7 @@ from flask import json
 from flask.ext.testing import TestCase
 
 from models import User, Quest
-from server import create_app, db, xp_to_next_level, confirm_quest, complete_quest, calc_triangular_difficulty
+from server import create_app, db, confirm_quest, complete_quest, calc_triangular_difficulty
 
 TEST_EMAIL = 'mike@mike.com'
 TEST_PASSWORD = 'potatoes'
@@ -243,11 +243,15 @@ class MyTestCase(TestCase):
         self.assertEqual(db_user.gold, 50)
 
     def test_level(self):
-        self.assertEqual(xp_to_next_level(1), 0)
-        self.assertEqual(xp_to_next_level(2), 100)
-        self.assertEqual(xp_to_next_level(3), 300)
-        self.assertEqual(xp_to_next_level(4), 600)
-        self.assertEqual(xp_to_next_level(5), 1000)
+        user = User()
+        user.character_level = 1
+        self.assertEqual(user.xp_to_next_level(), 100)
+        user.character_level = 2
+        self.assertEqual(user.xp_to_next_level(), 300)
+        user.character_level = 3
+        self.assertEqual(user.xp_to_next_level(), 600)
+        user.character_level = 4
+        self.assertEqual(user.xp_to_next_level(), 1000)
 
     def test_quest_expiry(self):
         child = create_child(self)

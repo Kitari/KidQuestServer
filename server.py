@@ -9,7 +9,7 @@ from sqlalchemy import func
 from config import GCM_API_KEY
 from models import User, Quest, db, Reward
 
-XP_REQUIRED_COEFFICIENT = 100
+
 
 auth = HTTPBasicAuth()
 api = Blueprint('api', __name__, url_prefix="/api")
@@ -106,11 +106,18 @@ def detail_user(user_id):
 
     elif request.method == 'PUT':
         json = request.json
+        query = db.session.query(User).filter_by(id=user_id)
         if 'parent_id' in json:
-            db.session.query(User).filter_by(id=user_id).update({"parent_id": json['parent_id']})
+            query.update({"parent_id": json['parent_id']})
 
         if 'gcm_id' in json:
-            db.session.query(User).filter_by(id=user_id).update({"gcm_id": json['gcm_id']})
+            query.update({"gcm_id": json['gcm_id']})
+
+        if 'character_name' in json:
+            query.update({"character_name": json['character_name']})
+
+        if 'parent_pin' in json:
+            query.update({"parent_pin": json['parent_pin']})
 
         db.session.commit()
         return jsonify(user.serialize())
@@ -282,11 +289,15 @@ def complete_reward(reward):
     db.session.commit()
 
 
-def level_up(user):
-    user.character_level += 1
-    db.session.commit()
+def check_level_up(user):
+    if user.xp >= user.xp_to_next_level():
+        user.xp -= user.xp_to_next_level()
+        user.character_level += 1
+        db.session.commit()
 
-    notify_if_partner(user, "You have levelled up!")
+        check_level_up(user)
+
+        notify_if_partner(user, "You have levelled up!")
 
 
 def confirm_quest(quest):
@@ -297,10 +308,8 @@ def confirm_quest(quest):
     user.gold += quest.gold_reward
     user.xp += quest.xp_reward
 
-    xp_needed = xp_to_next_level(user.character_level + 1)
 
-    if user.xp >= xp_needed:
-        level_up(user)
+    check_level_up(user)
 
     db.session.commit()
 
@@ -337,15 +346,6 @@ def calculate_xp_reward(diff, owner):
     reward *= ((owner.character_level - 1) / 100 + 1)  # Slightly increase gold reward based on level
 
     return reward
-
-
-def xp_to_next_level(level):
-    """ Returns the XP needed for next level """
-    sum_ = 0
-    for i in range(level):
-        sum_ += i
-
-    return sum_ * XP_REQUIRED_COEFFICIENT
 
 
 def notify_if_partner(user, message):
