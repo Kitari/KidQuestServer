@@ -352,7 +352,7 @@ def calculate_xp_reward(diff, owner):
 
 
 def notify_if_partner(user, message):
-    u = get_partnered_user(user)
+    u = get_partnered_user(g.user)
     if u:
         notify_user(u, message)
 
@@ -363,9 +363,8 @@ def notify_user(destination_user, message):
 
     data = {'message': message}
 
-    if destination_user.gcm_id == 'TESTACCOUNT':
-        print('Notification sent to test account, destination=' + destination_user.email + ', message=' + message)
-    else:
+    print('Notification sent to test account, destination=' + destination_user.email + ', message=' + message)
+    if destination_user.gcm_id != 'TESTACCOUNT':
         response = gcm.json_request(registration_ids=reg_id, data=data)
 
         # TODO: Check response for errors
@@ -376,7 +375,7 @@ def get_partnered_user(user):
         return user.parent
     d = db.session.query(User).filter_by(parent_id=user.id).all()
     if len(d) > 0:
-        return d[1]
+        return d[0]
 
 
 if __name__ == '__main__':
