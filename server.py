@@ -111,7 +111,11 @@ def detail_user(user_id):
             query.update({"parent_id": json['parent_id']})
 
         if 'gcm_id' in json:
-            query.update({"gcm_id": json['gcm_id']})
+            if user == g.user:
+                query.update({"gcm_id": json['gcm_id']})
+            else:
+                query2 = db.session.query(User).filter_by(id=user.parent_id)
+                query2.update({"gcm_id": json['gcm_id']})
 
         if 'character_name' in json:
             query.update({"character_name": json['character_name']})
@@ -307,7 +311,6 @@ def confirm_quest(quest):
 
     user.gold += quest.gold_reward
     user.xp += quest.xp_reward
-
 
     check_level_up(user)
 

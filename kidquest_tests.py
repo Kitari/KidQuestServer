@@ -163,9 +163,9 @@ class MyTestCase(TestCase):
 
         db_user = db.session.query(User).filter_by(id=child['id']).first()
 
-        # Test XP and Gold Gain
+        # Test level and Gold Gain
         self.assertTrue(db_user.gold > old_gold)
-        self.assertEqual(db_user.xp, 100)
+        self.assertEqual(db_user.xp, 0)
         self.assertEqual(db_user.character_level, 2)
 
         # test invalid quest no json
@@ -341,6 +341,38 @@ class MyTestCase(TestCase):
 
         with self.assertRaises(ValueError):
             calc_triangular_difficulty('BAD DIFFICULTY')
+
+    def test_gcm_adding(self):
+        child = create_child(self)
+        parent = create_parent(self)
+        self.client.put('/api/users/' + child['id'] + '/', data=json.dumps(dict(parent_id=parent['id'])),
+                        headers=get_auth_header(child['token'], 'nopassword'),
+                        content_type='application/json')
+        GCM_DATA = {
+            "gcm_id" : "TESTCHILD"
+        }
+
+        #child adding own gcm key
+        rv = self.client.put('/api/users/' + child['id'] + '/', data=json.dumps(GCM_DATA),
+                             content_type='application/json',
+                             headers=get_auth_header(child['token'], 'nopassword'))
+        self.assert200(rv)
+        db_child = db.session.query(User).filter_by(id=child['id']).first()
+
+        self.assertEqual(db_child.gcm_id, "TESTCHILD")
+
+        GCM_DATA_2 = {
+            "gcm_id" : "TESTPARENT"
+        }
+        # parent adding own gcm key
+        rv = self.client.put('/api/users/' + child['id'] + '/', data=json.dumps(GCM_DATA_2),
+                             content_type='application/json',
+                             headers=get_auth_header(parent['token'], 'nopassword'))
+        self.assert200(rv)
+        db_parent = db.session.query(User).filter_by(id=parent['id']).first()
+
+        self.assertEqual(db_child.gcm_id, "TESTCHILD")
+        self.assertEqual(db_parent.gcm_id, "TESTPARENT")
 
 
 def create_child(self, email=None, password=None):
