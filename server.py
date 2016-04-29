@@ -64,10 +64,12 @@ def get_auth_token():
 
     if user_is_parent:
         user_id = g.user.get_child().id
+        parent_pin = g.user.get_child().parent_pin
     else:
         user_id = g.user.id
+        parent_pin = g.user.parent_pin
 
-    return jsonify({'token': token.decode('ascii'), 'id': user_id, 'parent_pin': g.user.parent_pin,
+    return jsonify({'token': token.decode('ascii'), 'id': user_id, 'parent_pin': parent_pin,
                     'is_parent': user_is_parent})
 
 
