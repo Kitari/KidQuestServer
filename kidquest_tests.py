@@ -287,7 +287,7 @@ class MyTestCase(TestCase):
         self.assertLess(current_reward, quest.gold_reward)
 
         quests = [quest]
-        for i in range(6):
+        for i in range(7):
             quests.append(self.create_quest(child))
 
         # test the test
@@ -305,14 +305,15 @@ class MyTestCase(TestCase):
 
         finished_or_expired_quests = [quests[5], quests[4], quests[1], quests[0], quests[3]]
 
-        self.assertEqual(str(quest.get_last_5_quests()), str(finished_or_expired_quests))
+        dbquests = quests[6].get_last_5_quests()
+        self.assertEqual(str(dbquests), str(finished_or_expired_quests))
 
         confirm_quest(quests[6])
         complete_quest(quests[6])
 
         finished_or_expired_quests = [quests[6], quests[5], quests[4], quests[1], quests[0]]
 
-        self.assertEqual(quest.get_last_5_quests(), finished_or_expired_quests)
+        self.assertEqual(quests[7].get_last_5_quests(), finished_or_expired_quests)
 
     def test_preset_quests(self):
         rv = self.client.get('/api/quests/getStaffPick/')

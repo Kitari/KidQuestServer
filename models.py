@@ -201,8 +201,8 @@ class Quest(db.Model):
     def get_last_5_quests(self):
         session = object_session(self)
 
-        completed_quests = session.query(Quest).filter_by(user=self.user).filter_by(confirmed=True).order_by(
-            desc(Quest.completed_date)).limit(5).all()
+        completed_quests = session.query(Quest).filter_by(user=self.user).filter_by(confirmed=True).filter(
+            Quest.id != self.id).order_by(desc(Quest.completed_date)).limit(5).all()
 
         # gets last 5 quests that were not completed and have expired
         current_time = datetime.datetime.now()
@@ -212,13 +212,13 @@ class Quest(db.Model):
         quests = completed_quests
         for q in expired_quests:
             q.completed_date = q.expiry_date
+            q.actual_reward = 0
             quests.append(q)
         quests.sort(key=lambda x: x.completed_date, reverse=True)
         return quests[:5]
 
-
-def calc_closed_loop_per_quest(self, coefficient, old_quest):
-    return coefficient * old_quest.actual_reward / old_quest.gold_reward * self.gold_reward
+    def calc_closed_loop_per_quest(self, coefficient, old_quest):
+        return coefficient * old_quest.actual_reward / old_quest.gold_reward * self.gold_reward
 
 
 class Reward(db.Model):

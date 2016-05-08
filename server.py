@@ -9,8 +9,6 @@ from sqlalchemy import func
 from config import GCM_API_KEY
 from models import User, Quest, db, Reward
 
-
-
 auth = HTTPBasicAuth()
 api = Blueprint('api', __name__, url_prefix="/api")
 
@@ -90,7 +88,8 @@ def create_user():
     if User.query.filter_by(email=email).first() is not None:
         abort(409, "Email already exists")  # existing user
 
-    user = User(email=email, gcm_id=json.get('gcm_id'))
+    user = User(email=email, gcm_id=json.get('gcm_id'), character_name=json.get('character_name'),
+                parent_pin=json.get('parent_pin'))
     user.hash_password(password)
     db.session.add(user)
     db.session.commit()
@@ -262,7 +261,7 @@ def valid_json(json, required_json):
 @api.route('/quests/getTrending/', methods=['GET'])
 def trending_quests():
     quests = db.session.query(Quest.title, func.count(Quest.title)).group_by(Quest.title).all()
-    qs = [dict(title=q.title, difficulty_level="Medium") for q in quests]
+    qs = [dict(title=q.title, difficultyLevel="Medium") for q in quests]
     return jsonify(quests=qs)
 
 
@@ -270,15 +269,15 @@ def trending_quests():
 def get_staff_pick():
     staff_pick = [
         {"title": "Clean your room",
-         "difficulty_level": "Easy"},
+         "difficultyLevel": "Easy"},
         {"title": "Read a book",
-         "difficulty_level": "Medium"},
+         "difficultyLevel": "Medium"},
         {"title": "Get an A in Maths",
-         "difficulty_level": "Very Hard"},
+         "difficultyLevel": "Very Hard"},
         {"title": "Shovel snow off the driveway",
-         "difficulty_level": "Easy"},
+         "difficultyLevel": "Easy"},
         {"title": "Wash the dishes",
-         "difficulty_level": "Very Easy"}
+         "difficultyLevel": "Very Easy"}
     ]
     return jsonify(quests=staff_pick)
 
@@ -311,6 +310,9 @@ def confirm_quest(quest):
 
     user = quest.user
 
+    gold_reward = quest.get_current_reward()
+
+    quest.actual_reward = gold_reward
     user.gold += quest.gold_reward
     user.xp += quest.xp_reward
 
