@@ -157,7 +157,7 @@ def add_quest_to_user(user_id):
         db.session.add(quest)
         db.session.commit()
 
-        notify_if_partner(user, "A new quest is available!")
+        notify_if_partner("A new quest is available!")
 
         return jsonify(quest.serialize()), 201
 
@@ -214,7 +214,7 @@ def user_rewards(user_id):
         db.session.add(reward)
         db.session.commit()
 
-        notify_if_partner(user, "A new reward is available in the store!")
+        notify_if_partner("A new reward is available in the store!")
 
         return jsonify(reward.serialize()), 201
 
@@ -240,7 +240,7 @@ def user_reward(user_id, reward_id):
         if 'completed' in json:
             reward = db.session.query(Reward).filter_by(id=reward_id).first()
             complete_reward(reward)
-            notify_if_partner(user, "A child you are monitoring has purchased a reward from the store")
+            notify_if_partner("A child you are monitoring has purchased a reward from the store")
 
         return jsonify(reward.serialize())
 
@@ -302,7 +302,7 @@ def check_level_up(user):
 
         check_level_up(user)
 
-        notify_if_partner(user, "You have levelled up!")
+        notify_child(user, "You have levelled up!")
 
 
 def confirm_quest(quest):
@@ -320,14 +320,14 @@ def confirm_quest(quest):
 
     db.session.commit()
 
-    notify_if_partner(user, "You have completed a quest!")
+    notify_if_partner("You have completed a quest!")
 
 
 def complete_quest(quest):
     quest.completed = True
     quest.completed_date = datetime.datetime.utcnow()
     db.session.commit()
-    notify_if_partner(quest.user, "A child you are monitoring has completed a task and requires approval")
+    notify_if_partner("A child you are monitoring has completed a task and requires approval")
 
 
 def calc_triangular_difficulty(diff):
@@ -355,10 +355,16 @@ def calculate_xp_reward(diff, owner):
     return reward
 
 
-def notify_if_partner(user, message):
+def notify_if_partner(message):
     u = get_partnered_user(g.user)
     if u:
         notify_user(u, message)
+
+
+def notify_child(user, message):
+    if user.is_parent():
+        user = user.get_child()
+    notify_user(user, message)
 
 
 def notify_user(destination_user, message):
